@@ -1,111 +1,119 @@
 import "regenerator-runtime/runtime";
 import * as THREE from "./three.module.js";
 import { GLTFLoader } from "./GLTFLoader.js";
-import * as SkeletonUtils from "./SkeletonUtils.js";
-import Soldier from "./models/Soldier.glb";
 
-let camera, scene, renderer;
-let clock;
+import Stats from "./stats.module.js";
+import { GUI } from "./lil-gui.module.min.js";
+import { OrbitControls } from "./OrbitControls.js";
+import LeePerrySmith from "../assets/models/LeePerrySmith.glb";
 
-const mixers = [];
+import mapCOL from "../assets/images/Map-COL.jpg";
+import mapSPEC from "../assets/images/Map-SPEC.jpg";
+import smoothUV from "../assets/images/Infinite-Level_02_Tangent_SmoothUV.jpg";
 
-init();
-animate();
+const container = document.getElementById("container");
+
+let renderer, scene, camera, stats;
+let mesh;
+let line;
+
+const mouse = new THREE.Vector2();
+
+const textureLoader = new THREE.TextureLoader();
+
+const params = {
+  minScale: 10,
+  maxScale: 20,
+  rotate: true
+};
+
+window.addEventListener("load", init);
 
 function init() {
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  container.appendChild(renderer.domElement);
+
+  stats = new Stats();
+  container.appendChild(stats.dom);
+
+  scene = new THREE.Scene();
+
   camera = new THREE.PerspectiveCamera(
     45,
     window.innerWidth / window.innerHeight,
     1,
     1000
   );
-  camera.position.set(2, 3, -6);
-  camera.lookAt(0, 1, 0);
+  camera.position.z = 120;
 
-  clock = new THREE.Clock();
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.minDistance = 50;
+  controls.maxDistance = 200;
 
-  scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xa0a0a0);
-  scene.fog = new THREE.Fog(0xa0a0a0, 10, 50);
+  scene.add(new THREE.AmbientLight(0x443333));
 
-  const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444);
-  hemiLight.position.set(0, 20, 0);
-  scene.add(hemiLight);
+  const dirLight1 = new THREE.DirectionalLight(0xffddcc, 1);
+  dirLight1.position.set(1, 0.3, 0.5);
+  scene.add(dirLight1);
 
-  const dirLight = new THREE.DirectionalLight(0xffffff);
-  dirLight.position.set(-3, 10, -10);
-  dirLight.castShadow = true;
-  dirLight.shadow.camera.top = 4;
-  dirLight.shadow.camera.bottom = -4;
-  dirLight.shadow.camera.left = -4;
-  dirLight.shadow.camera.right = 4;
-  dirLight.shadow.camera.near = 0.1;
-  dirLight.shadow.camera.far = 40;
-  scene.add(dirLight);
+  const dirLight2 = new THREE.DirectionalLight(0xccccff, 1);
+  dirLight2.position.set(-1, 0.75, -0.5);
+  scene.add(dirLight2);
 
-  // scene.add( new THREE.CameraHelper( dirLight.shadow.camera ) );
+  const geometry = new THREE.BufferGeometry();
+  geometry.setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
 
-  // ground
+  line = new THREE.Line(geometry, new THREE.LineBasicMaterial());
+  scene.add(line);
 
-  const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(200, 200),
-    new THREE.MeshPhongMaterial({ color: 0x999999, depthWrite: false })
-  );
-  mesh.rotation.x = -Math.PI / 2;
-  mesh.receiveShadow = true;
-  scene.add(mesh);
-
-  const loader = new GLTFLoader();
-  loader.load(Soldier, function (gltf) {
-    gltf.scene.traverse(function (object) {
-      console.log(object);
-      if (object.isMesh) object.castShadow = true;
-    });
-
-    const model1 = SkeletonUtils.clone(gltf.scene);
-    const model2 = SkeletonUtils.clone(gltf.scene);
-    const model3 = SkeletonUtils.clone(gltf.scene);
-
-    const mixer1 = new THREE.AnimationMixer(model1);
-    const mixer2 = new THREE.AnimationMixer(model2);
-    const mixer3 = new THREE.AnimationMixer(model3);
-
-    mixer1.clipAction(gltf.animations[0]).play(); // idle
-    mixer2.clipAction(gltf.animations[1]).play(); // run
-    mixer3.clipAction(gltf.animations[3]).play(); // walk
-
-    // model1.position.x = -2;
-    model2.position.x = 0;
-    // model3.position.x = 2;
-
-    // scene.add(model1, model2, model3);
-    scene.add(model2);
-    // mixers.push(mixer1, mixer2, mixer3);
-    mixers.push(mixer2);
-
-    animate();
-  });
-
-  renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.outputEncoding = THREE.sRGBEncoding;
-  renderer.shadowMap.enabled = true;
-  document.body.appendChild(renderer.domElement);
+  loadLeePerrySmith();
 
   window.addEventListener("resize", onWindowResize);
+
+
+  const gui = new GUI();
+
+  gui.add(params, "minScale", 1, 30);
+  gui.add(params, "maxScale", 1, 30);
+  gui.add(params, "rotate");
+  gui.open();
+
+  onWindowResize();
+  animate();
 }
+
+function loadLeePerrySmith() {
+  const loader = new GLTFLoader();
+
+  loader.load(LeePerrySmith, function (gltf) {
+    mesh = gltf.scene.children[0];
+    mesh.material = new THREE.MeshPhongMaterial({
+      specular: 0x111111,
+      map: textureLoader.load(mapCOL),
+      specularMap: textureLoader.load(mapSPEC),
+      normalMap: textureLoader.load(smoothUV),
+      shininess: 25,
+    });
+
+    scene.add(mesh);
+    mesh.scale.set(10, 10, 10);
+  });
+}
+
 
 function onWindowResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
+
   renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
 function animate() {
   requestAnimationFrame(animate);
-  const delta = clock.getDelta();
-  for (const mixer of mixers) mixer.update(delta);
 
   renderer.render(scene, camera);
+
+  stats.update();
 }
